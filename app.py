@@ -1,150 +1,188 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify, redirect, url_for, session, flash
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import time
 import requests
+import csv
+from io import BytesIO
+from werkzeug.security import generate_password_hash, check_password_hash
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from io import BytesIO
-from threading import Thread
 
 # Initialiser Flask
 app = Flask(__name__)
-
-# Configurer SQLAlchemy pour utiliser SQLite
+app.config['SECRET_KEY'] = 'supersecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test_results.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
 
-# Modèle pour la table des résultats de tests
+# Initialiser la base de données
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Modèle utilisateur
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+
+# Modèle pour les résultats de test
 class TestResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(500), nullable=False)
-    status = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.String(100), default=time.strftime('%Y-%m-%d %H:%M:%S'))
 
-# Créer la base de données et la table si elle n'existe pas
+# Création de la base de données
 with app.app_context():
     db.create_all()
 
-# Fonction pour tester si le site est accessible via Selenium (avec Brave)
+    # Ajouter un utilisateur "admin" par défaut si aucun utilisateur n'est trouvé dans la base de données
+    if not User.query.first():
+        hashed_password = generate_password_hash('password123')
+        admin = User(username='admin', password=hashed_password)
+        db.session.add(admin)
+        db.session.commit()
+
 def test_with_selenium(url):
-    chrome_options = Options()
-    chrome_options.binary_location = "C:/Users/abdel/AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe"
-    chromedriver_path = "C:/Users/abdel/chromedriver.exe"
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--disable-gpu')
     
+    # Spécifiez le chemin vers Brave
+    options.binary_location = "C:/Users/abdel/AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe"  # Remplacez ce chemin par le vôtre
+    chromedriver_path = "C:/Users/abdel/chromedriver.exe"
     service = Service(chromedriver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=options)
 
     try:
         driver.get(url)
-        time.sleep(3)  # Attendre que la page se charge
-        status = driver.title  # Récupère le titre de la page pour confirmer que le site est en ligne
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+
+        status = driver.title
         driver.quit()
-        return f"Le site fonctionne ! Titre de la page : {status}"
+        return f"✅ Le site fonctionne ! Titre de la page : {status}"
     except Exception as e:
         driver.quit()
-        return f"❌ Le site n'a pas pu être atteint. Erreur : {str(e)}"
+        return f"❌ Erreur : {str(e)}"
 
-# Fonction pour tester la performance (temps de réponse du site)
 def test_performance(url):
     try:
         start_time = time.time()
-        response = requests.get(url)
-        end_time = time.time()
-        duration = end_time - start_time
-        status_code = response.status_code
-        return f"Temps de réponse : {duration:.2f} secondes (Code HTTP : {status_code})"
+        response = requests.get(url, timeout=10)
+        duration = time.time() - start_time
+        return f"⏳ Temps de réponse : {duration:.2f} sec (HTTP {response.status_code})"
     except requests.exceptions.RequestException as e:
-        return f"Erreur de connexion : {str(e)}"
+        return f"⚠️ Erreur de connexion : {str(e)}"
 
-# Fonction pour tester la sécurité (si le site utilise HTTPS)
 def test_security(url):
-    if url.startswith("https"):
-        return "Le site utilise HTTPS."
-    else:
-        return "⚠️ Le site ne semble pas utiliser HTTPS."
+    return "🔒 HTTPS activé" if url.startswith("https") else "⚠️ HTTPS non activé"
 
 @app.route('/')
 def home():
     return render_template('index.html')
 
 @app.route('/test', methods=['POST'])
+@login_required
 def test_site():
-    url = request.form['url']  # Récupérer l'URL envoyée par le formulaire
-    
+    url = request.form['url']
     if url.startswith("http"):
-        # Tester avec Selenium
-        selenium_status = test_with_selenium(url)
+        # Utiliser des paragraphes ou d'autres balises pour un formatage plus propre
+        results = f"<p>{test_with_selenium(url)}</p><p>{test_performance(url)}</p><p>{test_security(url)}</p>"
         
-        # Tester la performance
-        performance_status = test_performance(url)
-        
-        # Tester la sécurité
-        security_status = test_security(url)
-        
-        # Combiner les résultats
-        status = f"{selenium_status}<br>{performance_status}<br>{security_status}"
-        
-        # Sauvegarder le résultat dans la base de données
-        new_result = TestResult(url=url, status=status)
+        new_result = TestResult(url=url, status=results)
         db.session.add(new_result)
         db.session.commit()
+        flash("Test effectué avec succès!", "success")
     else:
-        status = "❌ Veuillez entrer une URL valide (commençant par http ou https)."
-    
-    return render_template('index.html', status=status)
+        results = "<p>❌ URL invalide.</p>"
+    return render_template('index.html', status=results)
+
 
 @app.route('/report')
+@login_required
 def report():
-    # Récupérer tous les résultats de tests depuis la base de données
     results = TestResult.query.all()
-    return render_template('report.html', results=results)
+    if results:
+        return render_template('report.html', results=results)
+    else:
+        flash("Aucun rapport trouvé.", "warning")
+        return render_template('report.html', results=None)
 
-@app.route('/download_report')
-def download_report():
-    # Créer un fichier PDF en mémoire
+@app.route('/download_report/pdf')
+@login_required
+def download_pdf():
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     c.setFont("Helvetica", 10)
-
-    # Titre du rapport
-    c.drawString(100, 750, "Rapport des Tests de Site Web")
-    c.drawString(100, 730, "Date: " + time.strftime('%Y-%m-%d %H:%M:%S'))
-
-    # Ajouter les résultats des tests au PDF
+    c.drawString(100, 750, "Rapport des Tests Web")
+    c.drawString(100, 730, f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     results = TestResult.query.all()
     y_position = 700
     for result in results:
         c.drawString(100, y_position, f"URL: {result.url}")
         c.drawString(100, y_position - 20, f"Statut: {result.status}")
-        c.drawString(100, y_position - 40, f"Date et Heure: {result.timestamp}")
+        c.drawString(100, y_position - 40, f"Date: {result.timestamp}")
         y_position -= 60
-
         if y_position < 100:
             c.showPage()
-            c.setFont("Helvetica", 10)
             y_position = 750
-
-    # Sauvegarder le PDF dans la mémoire
     c.save()
-
-    # Définir la réponse comme un fichier à télécharger
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name="rapport_tests.pdf", mimetype="application/pdf")
 
-# Nouvelle route pour supprimer tous les rapports
-@app.route('/clear_reports')
+@app.route('/download_report/csv')
+@login_required
+def download_csv():
+    buffer = BytesIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["URL", "Statut", "Date"])
+    results = TestResult.query.all()
+    for result in results:
+        writer.writerow([result.url, result.status, result.timestamp])
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="rapport_tests.csv", mimetype="text/csv")
+
+@app.route('/clear_reports', methods=['POST'])
+@login_required
 def clear_reports():
-    try:
-        # Supprimer tous les enregistrements de la table TestResult
-        TestResult.query.delete()
-        db.session.commit()
-        return render_template('report.html', status="Tous les rapports ont été supprimés.", results=[])
-    except Exception as e:
-        return render_template('report.html', status=f"Erreur lors de la suppression des rapports: {str(e)}")
+    TestResult.query.delete()
+    db.session.commit()
+    flash("Tous les rapports ont été supprimés.", "success")
+    return redirect(url_for('report'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        user = User.query.filter_by(username=username).first()
+        
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('report'))
+        else:
+            flash("Nom d'utilisateur ou mot de passe incorrect.", "danger")
+
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 if __name__ == '__main__':
     app.run(debug=True)
