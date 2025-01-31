@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport des Tests</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        header {
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        h1 {
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th, table td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        table th {
+            background-color: #f2f2f2;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .button-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .button-container a, .button-container form {
+            margin: 10px;
+        }
+
+        .button-container button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .button-container button:hover {
+            background-color: #45a049;
+        }
+
+        .status-message {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border: 1px solid #4CAF50;
+            color: #388e3c;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Rapport des Tests de Site Web</h1>
+    </header>
+
+    <div class="container">
+        <!-- Affichage du message de statut après suppression ou toute autre action -->
+        <div class="status-message">{{ status }}</div>
+
+        <!-- Tableau des résultats de tests -->
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>URL</th>
+                    <th>Statut</th>
+                    <th>Date et Heure</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                    <tr>
+                        <td>{{ result.id }}</td>
+                        <td>{{ result.url }}</td>
+                        <td>
+                            <!-- Utilisation de <pre> pour afficher le statut avec des retours à la ligne -->
+                            <pre>{{ result.status|replace('<br>', '\n') }}</pre>
+                        </td>
+                        <td>{{ result.timestamp }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Boutons -->
+        <div class="button-container">
+            <!-- Bouton pour télécharger le rapport PDF -->
+            <a href="/download_report">
+                <button>Télécharger le Rapport en PDF</button>
+            </a>
+
+            <!-- Bouton pour retourner à la page d'accueil -->
+            <a href="/">
+                <button>Retour à l'Accueil</button>
+            </a>
+
+            <!-- Bouton pour effacer tous les rapports -->
+            <form action="/clear_reports" method="get">
+                <button type="submit" onclick="return confirm('Êtes-vous sûr de vouloir supprimer tous les rapports ?');">Supprimer tous les rapports</button>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
