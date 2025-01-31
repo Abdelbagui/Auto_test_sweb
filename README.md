@@ -1,200 +1,181 @@
-Voici un développement détaillé des améliorations possibles pour le projet :  
+Voici une documentation complète pour votre projet. Cette documentation couvre l'installation, l'architecture du projet, la description des fonctionnalités, ainsi que les détails techniques.
 
 ---
 
-# **7. Améliorations Possibles en Détail**  
+# Documentation du Projet - Outil de Test de Site Web
 
-## **1️⃣ Ajouter un Système d’Authentification (Connexion Utilisateur) 🔐**  
-### **Pourquoi ?**  
-Actuellement, tout utilisateur peut accéder à l’application et consulter les tests effectués. Ajouter un système d’authentification permettrait de :  
-✔️ Restreindre l’accès aux tests et rapports.  
-✔️ Permettre à plusieurs utilisateurs d’utiliser l’application avec un compte personnel.  
-✔️ Ajouter des fonctionnalités avancées comme un historique personnel des tests.  
+## Introduction
 
-### **Comment ?**  
-- Utiliser **Flask-Login** pour gérer l’authentification.  
-- Stocker les utilisateurs avec **SQLAlchemy** (ajout d’une table `User`).  
-- Sécuriser les mots de passe avec **Werkzeug Security** (hachage de mots de passe).  
+Ce projet est une application web permettant de tester des sites Web à travers trois critères principaux :
+1. **Disponibilité du site (via Selenium)**
+2. **Performance (temps de réponse HTTP)**
+3. **Sécurité (HTTPS)**
 
-### **Exemple de Code :**  
-#### **Modèle User (Base de Données)**
-```python
-from flask_login import UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
-
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-```
-
-#### **Routes Flask pour l’Authentification**
-```python
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
-        if user and user.check_password(request.form['password']):
-            login_user(user)
-            return redirect(url_for('dashboard'))
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-```
-
-💡 **Avantage** : L’application devient plus sécurisée et chaque utilisateur peut gérer ses propres tests.  
+Les utilisateurs peuvent tester des sites, visualiser les résultats sous forme de rapports, et télécharger ces rapports au format PDF ou CSV.
 
 ---
 
-## **2️⃣ Améliorer l’Interface avec Bootstrap 🎨**  
-### **Pourquoi ?**  
-Actuellement, l’interface est basique. Utiliser **Bootstrap** améliore :  
-✔️ L’esthétique (design plus moderne et professionnel).  
-✔️ La responsivité (adaptation aux mobiles et tablettes).  
-✔️ L’ergonomie (meilleure expérience utilisateur).  
+## Prérequis
 
-### **Comment ?**  
-1. Ajouter Bootstrap dans le fichier HTML :  
-```html
-<head>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-</head>
+Avant d'exécuter l'application, assurez-vous d'avoir les prérequis suivants :
+
+- **Python 3.x** : Vous pouvez télécharger Python [ici](https://www.python.org/downloads/).
+- **Bibliothèques Python nécessaires** :
+    - Flask
+    - Flask-SQLAlchemy
+    - Flask-Login
+    - Selenium
+    - Requests
+    - ReportLab
+    - Werkzeug
+    - CSV
+
+Vous pouvez installer les bibliothèques nécessaires avec la commande suivante :
+```bash
+pip install flask flask_sqlalchemy flask_login selenium requests reportlab
 ```
-2. Modifier l’affichage des tests avec des **cards Bootstrap** :  
-```html
-<div class="container">
-    <div class="card mt-3">
-        <div class="card-body">
-            <h5 class="card-title">Résultat du Test</h5>
-            <p class="card-text">{{ status }}</p>
-        </div>
-    </div>
-</div>
-```
-3. Ajouter un **bouton moderne** pour tester une URL :  
-```html
-<button class="btn btn-primary">Lancer le Test</button>
-```
-💡 **Avantage** : L’application devient plus agréable à utiliser avec un design professionnel.  
+
+De plus, vous devez avoir **ChromeDriver** et **Brave Browser** installés sur votre machine pour que Selenium puisse effectuer les tests de site.
+
+- Téléchargez **ChromeDriver** [ici](https://sites.google.com/a/chromium.org/chromedriver/downloads) en fonction de votre version de Chrome.
+- **Brave Browser** est utilisé comme alternative à Chrome et peut être téléchargé [ici](https://brave.com/download/).
 
 ---
 
-## **3️⃣ Exporter les Rapports en Excel 📊**  
-### **Pourquoi ?**  
-Le PDF est bien pour les rapports statiques, mais **un fichier Excel permet une analyse plus avancée**.  
-✔️ Tri et filtrage des résultats.  
-✔️ Graphiques et statistiques sur les performances des sites testés.  
+## Structure du Projet
 
-### **Comment ?**  
-Utiliser **pandas et openpyxl** pour générer un fichier `.xlsx`.  
-#### **Installation des dépendances**
-```sh
-pip install pandas openpyxl
-```
-#### **Code pour Générer un Fichier Excel**
-```python
-import pandas as pd
+Voici l'architecture de fichiers de votre projet :
 
-@app.route('/download_excel')
-def download_excel():
-    results = TestResult.query.all()
-    data = [{'URL': r.url, 'Statut': r.status, 'Date': r.timestamp} for r in results]
-    
-    df = pd.DataFrame(data)
-    excel_file = BytesIO()
-    with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Tests")
-    
-    excel_file.seek(0)
-    return send_file(excel_file, as_attachment=True, download_name="rapport_tests.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 ```
-💡 **Avantage** : Possibilité de **manipuler les données facilement** et d’effectuer des **analyses avancées**.  
+/test-web-app/
+├── app.py                # Fichier principal de l'application Flask
+├── /templates/           # Dossier contenant les fichiers HTML
+│   ├── index.html        # Page d'accueil avec le formulaire de test
+│   ├── report.html       # Page de rapport avec les résultats des tests
+│   └── login.html        # Page de connexion
+├── /static/              # Dossier contenant les fichiers CSS
+│   └── styles.css        # Styles personnalisés
+└── /instance/            # Dossier contenant la base de données SQLite
+    └── test_results.db   # Base de données contenant les résultats des tests
+```
 
 ---
 
-## **4️⃣ Intégrer un Analyseur SEO 🔍**  
-### **Pourquoi ?**  
-Un test basique ne suffit pas toujours. **Un outil SEO permet d’évaluer la qualité du site** :  
-✔️ Vérification des **balises meta** (description, titre).  
-✔️ Analyse du **temps de chargement**.  
-✔️ Détection des **liens cassés**.  
+## Description des Fonctionnalités
 
-### **Comment ?**  
-Utiliser **BeautifulSoup** pour analyser le contenu HTML :  
-```sh
-pip install beautifulsoup4
-```
-#### **Code pour Extraire les Meta-Descriptions**
+### 1. **Page d'Accueil (`index.html`)**
+- **Formulaire de Test** : Permet à l'utilisateur de saisir l'URL d'un site Web pour le tester.
+- **Exécution du Test** : Lors de la soumission du formulaire, un test est effectué sur l'URL saisie, incluant la vérification de la disponibilité du site, la performance et la sécurité.
+- **Résultats** : Les résultats sont affichés immédiatement après le test. Si l'URL est invalide, un message d'erreur est affiché.
+
+### 2. **Page de Rapport (`report.html`)**
+- **Liste des Résultats** : Affiche les rapports des tests précédemment effectués, avec les colonnes suivantes :
+  - URL du site testé
+  - Statut du test (fonctionnement, temps de réponse, sécurité)
+  - Date et heure du test
+- **Téléchargement des Rapports** : Permet de télécharger les rapports au format **PDF** ou **CSV**.
+- **Suppression des Rapports** : Un bouton pour supprimer tous les rapports existants.
+
+### 3. **Page de Connexion (`login.html`)**
+- **Authentification** : L'accès à la page des rapports est sécurisé. Les utilisateurs doivent se connecter avec un nom d'utilisateur et un mot de passe pour y accéder.
+- **Gestion des utilisateurs** : L'utilisateur "admin" est créé par défaut lors de la première utilisation de l'application.
+
+### 4. **Tests de Site**
+Le système effectue trois types de tests :
+- **Test de Fonctionnement** : Utilisation de **Selenium** pour vérifier si le site est accessible et obtenir le titre de la page.
+- **Test de Performance** : Utilisation de **Requests** pour mesurer le temps de réponse du site.
+- **Test de Sécurité** : Vérification si l'URL commence par **https://** pour déterminer si la connexion est sécurisée.
+
+---
+
+## Détails Techniques
+
+### 1. **Backend (Flask)**
+L'application utilise **Flask**, un framework web léger pour Python. Les principales fonctionnalités du backend incluent :
+- **Routes** :
+    - `/` : Page d'accueil avec le formulaire de test.
+    - `/test` : Effectue le test sur l'URL soumise.
+    - `/report` : Affiche les rapports de tests précédents.
+    - `/download_report/pdf` : Télécharge le rapport des tests sous forme de fichier PDF.
+    - `/download_report/csv` : Télécharge le rapport des tests sous forme de fichier CSV.
+    - `/clear_reports` : Supprime tous les rapports enregistrés dans la base de données.
+    - `/login` : Page de connexion.
+    - `/logout` : Déconnexion de l'utilisateur.
+
+- **Base de données (SQLAlchemy)** : Utilisation de **SQLite** pour stocker les résultats des tests dans une base de données locale (`test_results.db`). Chaque rapport de test est sauvegardé avec l'URL, le statut, et la date du test.
+  
+- **Sécurisation de l'Accès** : Utilisation de **Flask-Login** pour gérer l'authentification des utilisateurs. Seul l'utilisateur connecté peut accéder à la page des rapports.
+
+### 2. **Tests de Site avec Selenium**
+L'application utilise **Selenium** pour tester la disponibilité du site en visitant l'URL dans un navigateur sans interface graphique (mode "headless"). Le titre de la page est récupéré pour déterminer si le site fonctionne correctement.
+
+**Exemple de code** pour tester le fonctionnement d'un site :
 ```python
-from bs4 import BeautifulSoup
+def test_with_selenium(url):
+    options = Options()
+    options.add_argument('--headless')  # Mode sans interface graphique
+    options.binary_location = "C:/Path/To/BraveBrowser"
+    chromedriver_path = "C:/Path/To/chromedriver"
+    service = Service(chromedriver_path)
+    driver = webdriver.Chrome(service=service, options=options)
 
-def analyze_seo(url):
     try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Récupérer le titre et la meta description
-        title = soup.title.string if soup.title else "Titre non trouvé"
-        meta_desc = soup.find("meta", attrs={"name": "description"})
-        meta_desc_content = meta_desc["content"] if meta_desc else "Meta description non trouvée"
-        
-        return f"Titre: {title}\nDescription: {meta_desc_content}"
-    except:
-        return "Erreur lors de l'analyse SEO."
+        driver.get(url)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+        status = driver.title
+        driver.quit()
+        return f"✅ Le site fonctionne ! Titre de la page : {status}"
+    except Exception as e:
+        driver.quit()
+        return f"❌ Erreur : {str(e)}"
 ```
-💡 **Avantage** : Obtenir des **informations utiles** pour améliorer le référencement du site testé.  
 
----
+### 3. **Test de Performance avec Requests**
+Le temps de réponse est mesuré en envoyant une requête **HTTP GET** à l'URL et en mesurant la durée de la réponse.
 
-## **5️⃣ Ajouter une API REST pour l’Automatisation ⚡**  
-### **Pourquoi ?**  
-Une API permettrait d’intégrer ce testeur dans d’autres outils ou scripts.  
-✔️ Automatiser les tests via des requêtes HTTP.  
-✔️ Intégration avec des **tableaux de bord externes**.  
-
-### **Comment ?**  
-Ajouter des routes **JSON** dans Flask pour permettre l’accès aux résultats via une API.  
-#### **Exemple d’Endpoint REST**
+**Exemple de code** pour tester la performance d'un site :
 ```python
-from flask import jsonify
-
-@app.route('/api/tests', methods=['GET'])
-def api_tests():
-    results = TestResult.query.all()
-    return jsonify([{"url": r.url, "status": r.status, "timestamp": r.timestamp} for r in results])
+def test_performance(url):
+    try:
+        start_time = time.time()
+        response = requests.get(url, timeout=10)
+        duration = time.time() - start_time
+        return f"⏳ Temps de réponse : {duration:.2f} sec (HTTP {response.status_code})"
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ Erreur de connexion : {str(e)}"
 ```
-💡 **Avantage** : Permet d’intégrer le projet avec d’autres **applications externes** ou un **bot d’analyse**.  
+
+### 4. **Test de Sécurité**
+Un simple test vérifie si l'URL commence par `https` pour indiquer que la connexion est sécurisée.
+
+**Exemple de code** :
+```python
+def test_security(url):
+    return "🔒 HTTPS activé" if url.startswith("https") else "⚠️ HTTPS non activé"
+```
 
 ---
 
-# **Conclusion 🚀**  
-Ces améliorations rendraient l’application **plus puissante, sécurisée et complète** :  
-✔️ **Authentification** → Sécurisation des données.  
-✔️ **Design amélioré** → Expérience utilisateur optimale.  
-✔️ **Export Excel** → Analyse avancée des résultats.  
-✔️ **SEO Analyzer** → Vérification automatique du référencement.  
-✔️ **API REST** → Intégration avec d’autres outils.  
+## Sécurisation de l'Application
 
-**👉 Quelle amélioration souhaitez-vous implémenter en premier ?** 😃
+- **Connexion et authentification** : L'authentification est gérée par **Flask-Login**. Un utilisateur `admin` est créé par défaut avec un mot de passe sécurisé.
+- **Gestion des sessions** : Flask utilise un cookie de session pour garder une trace de l'utilisateur connecté.
+
+---
+
+## Conclusion
+
+Ce projet est un outil simple et efficace pour tester des sites Web, avec une interface claire permettant de consulter les résultats des tests et de les exporter en PDF ou CSV. L'utilisation de **Selenium**, **Requests**, et **Flask** permet de créer une application web interactive qui peut être étendue et modifiée pour des besoins futurs.
+
+---
+
+## Pour aller plus loin
+
+- **Amélioration de l'interface utilisateur** : Ajouter des graphiques pour visualiser les performances.
+- **Tests supplémentaires** : Ajouter des tests pour des aspects comme la SEO, la compatibilité mobile, ou des tests de sécurité plus poussés.
+- **Déploiement** : Vous pouvez déployer cette application sur un serveur avec un fournisseur comme **Heroku** ou **AWS** pour l'utiliser en production.
+
+
 *********************
 ![alt text](static/image.png)
 ![alt text](static/image1.png)
